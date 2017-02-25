@@ -6,6 +6,7 @@
 import java.io._
 import java.net._
 import java.nio._
+import java.nio.file._
 import java.text._
 import java.util.Date
 
@@ -29,34 +30,108 @@ object MyWebServer {
 		} catch {
 			case e: ArrayIndexOutOfBoundsException => println("Not enough arguments!")
 			case e: NumberFormatException => println(s"'${args(0)}' is not a port number!")
+			case e: Exception => println(":( " + e.toString())
 		}
 	}
 
 	def got_connection(conn: Socket): Unit = {
-		parse_headers(new BufferedReader(
+		var r = parse_headers(new BufferedReader(
 			new InputStreamReader(conn.getInputStream)))
-		write_headers(new DataOutputStream(conn.getOutputStream))
-		conn.close
+
+		var payload: Array[Byte] = new Array(_length=0)
+		if (r.verb == "GET")
+			payload = try
+				Files.readAllBytes(r.path)
+			catch {
+				case e: IOException => {
+					r.path = r.path.resolve("index.html")
+					Files.readAllBytes(r.path)
+				}
+			}
+
+		respond(new DataOutputStream(conn.getOutputStream),
+			Files.probeContentType(r.path), new File(r.path.toString()).lastModified(), payload)
+
+		// TODO: if-modified-since, what even are semantics really?
+		if (r.close_requested)
+			conn.close
 	}
 
-	def parse_headers(input: BufferedReader): Unit = {
+	def parse_headers(input: BufferedReader): Request = {
+		var r = new Request
 		while (true) {
 			val line = input.readLine
-			if (line.isEmpty) return
-			println(line)
+			if (line.isEmpty) return r
+			line match {
+
+				case HTTPVerb(verb, path) => {
+					r.verb = verb
+					var p = path
+					if (path.startsWith("http://"))
+						p = p.substring(7)
+					r.path = Paths.get(root + p)
+				}
+
+				case HTTPHeader(key, value) => {
+					key match {
+						case "Close" => r.close_requested = true
+						case "If-Modified-Since" => r.if_modified_since = value
+						case _ => ;
+					}
+				}
+
+				case _ => println(f"Ah fuck I didn't recognize '${line}'")
+			}
 		}
+
+	/*****\
+ (*/ r /*)
+  \*****/
+
 	}
 
-	def write_headers(output: DataOutputStream) = {
+	def respond(output: DataOutputStream, content_type: String, mtime: Long, data: Array[Byte]) = {
 		output.writeBytes(s"""HTTP/1.1 200 OK
 Date: ${http_date.format(new Date)}
 Server: ${server_name}/${version} (Arch GNU/Linux)
-Last-Modified: ${http_date.format(new Date) /* TODO */}
-Content-Length: 18
-Content-Type: text/html
+Last-Modified: ${http_date.format(mtime) /* TODO */}
+Content-Length: ${data.length + 1}
+Content-Type: ${content_type}
 
-<h1>FUCK YOU</h1>
+${new String(data)}
 """)
-		//Content-Type: ${Files.probeContentType(path)}
+	}
+}
+
+class Request {
+	var verb: String = null
+	var path: Path = null
+	var if_modified_since: String = null
+	var persistent: Boolean = true
+	var close_requested: Boolean = false
+}
+
+object HTTPHeader {
+	def unapply(s: String) = {
+		if (s.contains(": ")) {
+			val colon_pos = s.indexOf(":")
+			Some(s.substring(0, colon_pos), s.substring(colon_pos + 2))
+		} else {
+			None
+		}
+	}
+}
+
+object HTTPVerb {
+	def unapply(s: String) = {
+		if (s.startsWith("GET ") || s.startsWith("HEAD ")) {
+			val before_path = s.indexOf(' ')
+			val after_path = s.lastIndexOf(' ')
+			val verb = s.substring(0, before_path)
+			val path = s.substring(before_path + 1, after_path)
+			Some(verb, path)
+		} else {
+			None
+		}
 	}
 }
