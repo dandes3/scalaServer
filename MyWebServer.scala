@@ -30,27 +30,65 @@ object MyWebServer {
 		} catch {
 			case e: ArrayIndexOutOfBoundsException => println("Not enough arguments!")
 			case e: NumberFormatException => println(s"'${args(0)}' is not a port number!")
-			case e: Exception => println(":( " + e.toString())
+			case e: Exception => println(":( " + e.toString)
 		}
+	}
+
+	def static_error(status: Int) = {
+		val err_name = Map(
+			403 -> "Access is forbidden",
+			404 -> "Page not found",
+			500 -> "Internal server error",
+			501 -> "Not implemented"
+		)
+
+		f"""
+		<!doctype html>
+		<html lang="en">
+		<head>
+			<meta charset="utf-8">
+			<title>${status}</title>
+		</head>
+		<body>
+			<h1>${status}: ${err_name(status)}</h1>
+		</body>
+		</html>
+		"""
 	}
 
 	def got_connection(conn: Socket): Unit = {
 		var r = parse_headers(new BufferedReader(
 			new InputStreamReader(conn.getInputStream)))
 
-		var payload: Array[Byte] = new Array(_length=0)
-		if (r.verb == "GET")
-			payload = try
-				Files.readAllBytes(r.path)
-			catch {
-				case e: IOException => {
-					r.path = r.path.resolve("index.html")
-					Files.readAllBytes(r.path)
-				}
+		var payload: Array[Byte] = null
+		var status = 501
+		if (r.verb == "GET") {
+			var path = Path.get(r.path)
+			var file = new File(path)
+			while (file.isDirectory) {
+				path = path.resolve("index.html")
+				file = new File(path)
 			}
 
-		respond(new DataOutputStream(conn.getOutputStream),
-			Files.probeContentType(r.path), new File(r.path.toString()).lastModified(), payload)
+			if (file.exists) {
+				try {
+					payload = Files.readAllBytes(path)
+				} catch {
+					case e: IOException => status = 403
+				}
+
+			} else {
+				status = 404
+				payload = "<h1>404: File not found!</h1>"
+			}
+		}
+
+		respond(
+			new DataOutputStream(conn.getOutputStream),
+			Files.probeContentType(r.path),
+			new File(r.path.toString).lastModified,
+			status,
+			payload)
 
 		// TODO: if-modified-since, what even are semantics really?
 		if (r.close_requested)
@@ -90,7 +128,7 @@ object MyWebServer {
 
 	}
 
-	def respond(output: DataOutputStream, content_type: String, mtime: Long, data: Array[Byte]) = {
+	def respond(output: DataOutputStream, content_type: String, mtime: Long, status: int, data: Array[Byte]) = {
 		output.writeBytes(s"""HTTP/1.1 200 OK
 Date: ${http_date.format(new Date)}
 Server: ${server_name}/${version} (Arch GNU/Linux)
@@ -98,14 +136,14 @@ Last-Modified: ${http_date.format(mtime) /* TODO */}
 Content-Length: ${data.length + 1}
 Content-Type: ${content_type}
 
-${new String(data)}
+${if (status >= 400) static_error(status) else new String(data)}
 """)
 	}
 }
 
 class Request {
 	var verb: String = null
-	var path: Path = null
+	var path: String = null
 	var if_modified_since: String = null
 	var persistent: Boolean = true
 	var close_requested: Boolean = false
