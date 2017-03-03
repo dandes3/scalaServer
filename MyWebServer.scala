@@ -26,127 +26,143 @@ object MyWebServer {
 			port = args(0).toInt
 			if (port < 0) throw new NumberFormatException
 			socket = new ServerSocket(port)
+			println(s"listening on port ${port}")
 			Iterator continually None foreach ( _ => got_connection(socket.accept) )
 		} catch {
 			case e: ArrayIndexOutOfBoundsException => println("Not enough arguments!")
 			case e: NumberFormatException => println(s"'${args(0)}' is not a port number!")
-			case e: Exception => println(":( " + e.toString)
+			case e: Exception => println("Server error: " + e.toString)
 		}
 	}
 
-	def static_error(status: Int) = {
+	/* turn an HTTP path request into an actual filesystem path */
+	def resolve_path(r: Request) = {
+			var path = Paths.get(root + r.path)
+			var file = path.toFile
+			while (file.isDirectory) {
+				path = path.resolve("index.html")
+				file = path.toFile
+			}
+			path
+	}
+
+	/* given a path and a request, get the appropriate error code */
+	def status_code(r: Request, path: Path) = {
+		val f = path.toFile
+		if (r.verb != "GET" && r.verb != "HEAD")
+			501
+		else if (!f.exists)
+			404
+		else if (!f.canRead)
+			403
+		else
+			200
+	}
+
+	def got_connection(conn: Socket): Unit = {
+		println("\nconnection received")
+		val output = new DataOutputStream(conn.getOutputStream)
+
+		parse_headers(new BufferedReader(new InputStreamReader(conn.getInputStream))) match {
+			case Some(r) => {
+				println(s"${r.verb} ${r.path}")
+				val path = resolve_path(r)
+				status_code(r, path) match {
+					case 200 => ok(output, path, r.verb != "HEAD")
+					case status: Int => err(output, status)
+				}
+				if (r.close_requested)
+					conn.close
+			}
+
+			case None => {
+				println("malformed request")
+				err(output, 400)
+				conn.close
+			}
+		}
+		// TODO: if-modified-since, what even are semantics really?
+	}
+
+	def parse_headers(input: BufferedReader): Option[Request] = {
+		var r = new Request
+
+		while (true) {
+			val line = input.readLine
+			if (line.isEmpty) return Some(r)
+			try {
+				line match {
+
+					case HTTPVerb(verb, path) => {
+						r.verb = verb
+						r.path = path
+						if (r.path.startsWith("http://"))
+							r.path = r.path.substring(7)
+					}
+
+					case HTTPHeader(key, value) => {
+						key match {
+							case "Connection" => r.close_requested = (value == "close")
+							case "If-Modified-Since" => r.if_modified_since = http_date.parse(value, new ParsePosition(0))
+							// DEBUG: new ParsePosition
+							case _ => ;
+						}
+					}
+
+					case _ => return None
+				}
+
+			} catch {
+				case _: Throwable => return None
+			}
+		}
+
+		None
+	}
+
+	def ok(output: DataOutputStream, path: Path, include_body: Boolean) = {
+		respond(output, 200, new Date(path.toFile.lastModified), Files.probeContentType(path), if (include_body) new String(Files.readAllBytes(path)) else "")
+	}
+
+	def err(output: DataOutputStream, status: Int) = {
 		val err_name = Map(
+			400 -> "Bad request",
 			403 -> "Access is forbidden",
 			404 -> "Page not found",
 			500 -> "Internal server error",
 			501 -> "Not implemented"
 		)
 
-		f"""
-		<!doctype html>
-		<html lang="en">
-		<head>
-			<meta charset="utf-8">
-			<title>${status}</title>
-		</head>
-		<body>
-			<h1>${status}: ${err_name(status)}</h1>
-		</body>
-		</html>
-		"""
+		respond(output, status, new Date, "text/html", f"""<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>${status}</title>
+</head>
+<body>
+	<h1>${status}: ${err_name(status)}</h1>
+</body>
+</html>""")
 	}
 
-	def got_connection(conn: Socket): Unit = {
-		var r = parse_headers(new BufferedReader(
-			new InputStreamReader(conn.getInputStream)))
-
-		var payload: Array[Byte] = "".getBytes
-		var status = 501
-		var path: Path = null
-		var file: File = null
-		// TODO: syntax
-		if (r.verb == "GET" || r.verb == "HEAD") {
-			path = Paths.get(r.path)
-			file = path.toFile
-			while (file.isDirectory) {
-				path = path.resolve("index.html")
-				file = path.toFile
-			}
-
-			status =
-				if (file.exists) try {
-						payload = Files.readAllBytes(path)
-						200
-					} catch case e: IOException => 403
-
-				} else {
-					payload = "<h1>404: File not found!</h1>".getBytes
-					404
-				}
-		}
-
-		respond(
-			new DataOutputStream(conn.getOutputStream),
-			Files.probeContentType(path),
-			file.lastModified,
-			status,
-			payload)
-
-		// TODO: if-modified-since, what even are semantics really?
-		if (r.close_requested)
-			conn.close
-	}
-
-	def parse_headers(input: BufferedReader): Request = {
-		var r = new Request
-		while (true) {
-			val line = input.readLine
-			if (line.isEmpty) return r
-			line match {
-
-				case HTTPVerb(verb, path) => {
-					r.verb = verb
-					r.path = path
-					if (r.path.startsWith("http://"))
-						r.path = r.path.substring(7)
-					r.path = root + r.path
-				}
-
-				case HTTPHeader(key, value) => {
-					key match {
-						case "Close" => r.close_requested = true
-						case "If-Modified-Since" => r.if_modified_since = value
-						case _ => ;
-					}
-				}
-
-				case _ => println(f"Ah rats, I didn't recognize '${line}'")
-			}
-		}
-
-  /*****\
- (*/ r /*)
-  \*****/
-
-	}
-
-	def respond(output: DataOutputStream, content_type: String, mtime: Long, status: Int, data: Array[Byte]) = {
-		output.writeBytes(s"""HTTP/1.1 200 OK
+	def respond(output: DataOutputStream, status: Int, mtime: Date, content_type: String, body: String) = {
+		val status_desc = if (status == 200) "OK" else ""
+		output.writeBytes(s"""HTTP/1.1 ${status} ${status_desc}
 Date: ${http_date.format(new Date)}
-Server: ${server_name}/${version} (Arch GNU/Linux)
+Server: ${server_name}/${version} (GNU/Linux)
 Last-Modified: ${http_date.format(mtime) /* TODO */}
-Content-Length: ${data.length + 1}
+Content-Length: ${body.length + 1}
 Content-Type: ${content_type}
 
-${if (status >= 400) static_error(status) else new String(data)}
+${body}
 """)
 	}
 }
 
 class Request {
-	var verb: String = null
-	var path: String = null
-	var if_modified_since: String = null
+	var verb: String = ""
+	var path: String = ""
+	var if_modified_since: Date = new Date
 	var persistent: Boolean = true
 	var close_requested: Boolean = false
 }
