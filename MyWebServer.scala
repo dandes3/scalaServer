@@ -87,13 +87,12 @@ object MyWebServer {
 				conn.close
 			}
 		}
-		// TODO: if-modified-since, what even are semantics really?
 	}
 
 	def parse_headers(input: BufferedReader): Option[Request] = {
 		var r = new Request
-		//println(r.if_modified_since)
 
+		// Iterator continually None foreach: lol
 		while (true) {
 			val line = input.readLine
 			if (line.isEmpty) return Some(r)
