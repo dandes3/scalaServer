@@ -60,33 +60,35 @@ object MyWebServer {
 		var r = parse_headers(new BufferedReader(
 			new InputStreamReader(conn.getInputStream)))
 
-		var payload: Array[Byte] = null
+		var payload: Array[Byte] = "".getBytes
 		var status = 501
-		if (r.verb == "GET") {
-			var path = Path.get(r.path)
-			var file = new File(path)
+		var path: Path = null
+		var file: File = null
+		// TODO: syntax
+		if (r.verb == "GET" || r.verb == "HEAD") {
+			path = Paths.get(r.path)
+			file = path.toFile
 			while (file.isDirectory) {
 				path = path.resolve("index.html")
-				file = new File(path)
+				file = path.toFile
 			}
 
-			if (file.exists) {
-				try {
-					payload = Files.readAllBytes(path)
-				} catch {
-					case e: IOException => status = 403
+			status =
+				if (file.exists) try {
+						payload = Files.readAllBytes(path)
+						200
+					} catch case e: IOException => 403
+
+				} else {
+					payload = "<h1>404: File not found!</h1>".getBytes
+					404
 				}
-
-			} else {
-				status = 404
-				payload = "<h1>404: File not found!</h1>"
-			}
 		}
 
 		respond(
 			new DataOutputStream(conn.getOutputStream),
-			Files.probeContentType(r.path),
-			new File(r.path.toString).lastModified,
+			Files.probeContentType(path),
+			file.lastModified,
 			status,
 			payload)
 
@@ -104,10 +106,10 @@ object MyWebServer {
 
 				case HTTPVerb(verb, path) => {
 					r.verb = verb
-					var p = path
-					if (path.startsWith("http://"))
-						p = p.substring(7)
-					r.path = Paths.get(root + p)
+					r.path = path
+					if (r.path.startsWith("http://"))
+						r.path = r.path.substring(7)
+					r.path = root + r.path
 				}
 
 				case HTTPHeader(key, value) => {
@@ -118,7 +120,7 @@ object MyWebServer {
 					}
 				}
 
-				case _ => println(f"Ah fuck I didn't recognize '${line}'")
+				case _ => println(f"Ah rats, I didn't recognize '${line}'")
 			}
 		}
 
@@ -128,7 +130,7 @@ object MyWebServer {
 
 	}
 
-	def respond(output: DataOutputStream, content_type: String, mtime: Long, status: int, data: Array[Byte]) = {
+	def respond(output: DataOutputStream, content_type: String, mtime: Long, status: Int, data: Array[Byte]) = {
 		output.writeBytes(s"""HTTP/1.1 200 OK
 Date: ${http_date.format(new Date)}
 Server: ${server_name}/${version} (Arch GNU/Linux)
