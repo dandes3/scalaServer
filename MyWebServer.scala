@@ -7,6 +7,7 @@ import java.io._
 import java.net._
 import java.nio._
 import java.nio.file._
+import java.io.File
 import java.text._
 import java.util.Date
 
@@ -49,12 +50,16 @@ object MyWebServer {
 	/* given a path and a request, get the appropriate error code */
 	def status_code(r: Request, path: Path) = {
 		val f = path.toFile
+		val modifiedTime: Date = new Date(f.lastModified())
+
 		if (r.verb != "GET" && r.verb != "HEAD")
 			501
 		else if (!f.exists)
 			404
 		else if (!f.canRead)
 			403
+		else if ((modifiedTime.compareTo(r.if_modified_since) < 0))
+		    304
 		else
 			200
 	}
@@ -69,6 +74,7 @@ object MyWebServer {
 				val path = resolve_path(r)
 				status_code(r, path) match {
 					case 200 => ok(output, path, r.verb != "HEAD")
+					case 304 => okNotMod(output, path, r.verb != "HEAD")
 					case status: Int => err(output, status)
 				}
 				if (r.close_requested)
@@ -86,6 +92,7 @@ object MyWebServer {
 
 	def parse_headers(input: BufferedReader): Option[Request] = {
 		var r = new Request
+		//println(r.if_modified_since)
 
 		while (true) {
 			val line = input.readLine
@@ -116,12 +123,16 @@ object MyWebServer {
 				case _: Throwable => return None
 			}
 		}
-
+		
 		None
 	}
 
 	def ok(output: DataOutputStream, path: Path, include_body: Boolean) = {
 		respond(output, 200, new Date(path.toFile.lastModified), Files.probeContentType(path), if (include_body) new String(Files.readAllBytes(path)) else "")
+	}
+
+	def okNotMod(output: DataOutputStream, path: Path, include_body: Boolean) = {
+		respond(output, 304, new Date(path.toFile.lastModified), Files.probeContentType(path), if (include_body) new String(Files.readAllBytes(path)) else "")
 	}
 
 	def err(output: DataOutputStream, status: Int) = {
@@ -131,6 +142,7 @@ object MyWebServer {
 			404 -> "Page not found",
 			500 -> "Internal server error",
 			501 -> "Not implemented"
+			//304 -> "Not Modified"
 		)
 
 		respond(output, status, new Date, "text/html", f"""<!doctype html>
@@ -146,7 +158,7 @@ object MyWebServer {
 	}
 
 	def respond(output: DataOutputStream, status: Int, mtime: Date, content_type: String, body: String) = {
-		val status_desc = if (status == 200) "OK" else ""
+		val status_desc = if (status == 200) "OK" else if (status == 304) "Not Modified" else "" 
 		output.writeBytes(s"""HTTP/1.1 ${status} ${status_desc}
 Date: ${http_date.format(new Date)}
 Server: ${server_name}/${version} (GNU/Linux)
