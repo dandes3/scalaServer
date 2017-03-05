@@ -1,7 +1,19 @@
-/* alvin alexander, scala god, says: "Scala methods that take a single
- * parameter can be invoked without dots or parentheses."
+/* Scala Web Server
+ * by Don Andes and Quint Guvernator
  *
- * also you can omit the parens in empty-argument-list functions */
+ * Scala is a language that, like Java, runs on the JVM, but unlike Java, is
+ * actually a good language that supports many programming styles. There are
+ * several language-level features in Scala that make functional programming
+ * easier and help reduce the inane boilerplate required by the Java standard
+ * library.
+ *
+ * We understand that it will be difficult to assign partial credit if our code
+ * fails tests. If you have any questions, we're happy to answer them.
+ *
+ * Thank you again for letting us push our boundaries on this. We learned a lot
+ * in the process of writing our server in a language neither of us knew.
+ * Hopefully we can keep it up for the rest of the semester.
+ */
 
 import java.io._
 import java.net._
