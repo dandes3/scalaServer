@@ -22,12 +22,13 @@ import java.nio.file._
 import java.io.File
 import java.text._
 import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 object MyWebServer {
 
 	val version = "0.1"
 	val server_name = "idk-not-java-tho"
-	val http_date = new SimpleDateFormat("EEE MMM d hh:mm:ss zzz yyyy")
 
 	var root: String = null
 	var port: Int = 0
@@ -48,6 +49,17 @@ object MyWebServer {
 		}
 	}
 
+	/* ported from "Getting Date in HTTP format in Java" at
+	 * http://stackoverflow.com/a/8642463 */
+	def http_date = {
+		var fmt = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.US)
+		fmt.setTimeZone(TimeZone.getTimeZone("GMT"))
+		fmt
+	}
+
+	/* gets file mtime and normalizes it to the nearest second */
+	def http_modified(file: File): Date = http_date.parse(http_date.format(new Date(file.lastModified)))
+
 	/* turn an HTTP path request into an actual filesystem path */
 	def resolve_path(r: Request) = {
 			var path = Paths.get(root + r.path)
@@ -62,7 +74,7 @@ object MyWebServer {
 	/* given a path and a request, get the appropriate error code */
 	def status_code(r: Request, path: Path) = {
 		val f = path.toFile
-		val modifiedTime: Date = new Date(f.lastModified())
+		val mtime = http_modified(f)
 
 		if (r.verb != "GET" && r.verb != "HEAD")
 			501
@@ -70,9 +82,11 @@ object MyWebServer {
 			404
 		else if (!f.canRead)
 			403
-		else if (r.if_modified_since map { x => modifiedTime.compareTo(x) < 0} getOrElse(false))
+		else if (r.if_modified_since.map(x => !mtime.after(x)).getOrElse(false)) {
+			println(s"if_modified_since: ${http_date.format(r.if_modified_since.get)}")
+			println(s"mtime: ${http_date.format(mtime)}")
 		  304
-		else
+		} else
 			200
 	}
 
@@ -122,7 +136,11 @@ object MyWebServer {
 						key match {
 							case "Connection" => r.close_requested = (value == "close")
 							case "If-Modified-Since" => {
-								r.if_modified_since = Some(http_date.parse(value, new ParsePosition(0)))
+
+								/* explicitly passing ParsePosition means that if the date
+								 * string fails to parse, header remains None */
+								r.if_modified_since = Option(http_date.parse(value, new ParsePosition(0)))
+
 							}
 							case _ => ;
 						}
@@ -140,11 +158,11 @@ object MyWebServer {
 	}
 
 	def ok(output: DataOutputStream, path: Path, include_body: Boolean) = {
-		respond(output, 200, new Date(path.toFile.lastModified), Files.probeContentType(path), if (include_body) new String(Files.readAllBytes(path)) else "")
+		respond(output, 200, http_modified(path.toFile), Files.probeContentType(path), if (include_body) new String(Files.readAllBytes(path)) else "")
 	}
 
 	def okNotMod(output: DataOutputStream, path: Path, include_body: Boolean) = {
-		respond(output, 304, new Date(path.toFile.lastModified), Files.probeContentType(path), "")
+		respond(output, 304, http_modified(path.toFile), Files.probeContentType(path), "")
 	}
 
 	def err(output: DataOutputStream, status: Int) = {
