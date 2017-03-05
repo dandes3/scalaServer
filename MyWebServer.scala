@@ -58,7 +58,7 @@ object MyWebServer {
 			404
 		else if (!f.canRead)
 			403
-		else if ((modifiedTime.compareTo(r.if_modified_since) < 0))
+		else if (((modifiedTime.compareTo(r.if_modified_since) < 0))&&r.mod_bool)
 		    304
 		else
 			200
@@ -109,8 +109,10 @@ object MyWebServer {
 					case HTTPHeader(key, value) => {
 						key match {
 							case "Connection" => r.close_requested = (value == "close")
-							case "If-Modified-Since" => r.if_modified_since = http_date.parse(value, new ParsePosition(0))
-							// DEBUG: new ParsePosition
+							case "If-Modified-Since" => {
+								r.if_modified_since = http_date.parse(value, new ParsePosition(0))
+								r.mod_bool = true
+							}
 							case _ => ;
 						}
 					}
@@ -141,7 +143,6 @@ object MyWebServer {
 			404 -> "Page not found",
 			500 -> "Internal server error",
 			501 -> "Not implemented"
-			//304 -> "Not Modified"
 		)
 
 		respond(output, status, new Date, "text/html", f"""<!doctype html>
@@ -161,7 +162,7 @@ object MyWebServer {
 		output.writeBytes(s"""HTTP/1.1 ${status} ${status_desc}
 Date: ${http_date.format(new Date)}
 Server: ${server_name}/${version} (GNU/Linux)
-Last-Modified: ${http_date.format(mtime) /* TODO */}
+Last-Modified: ${http_date.format(mtime)}
 Content-Length: ${body.length + 1}
 Content-Type: ${content_type}
 
@@ -174,6 +175,7 @@ class Request {
 	var verb: String = ""
 	var path: String = ""
 	var if_modified_since: Date = new Date
+	var mod_bool: Boolean = false
 	var persistent: Boolean = true
 	var close_requested: Boolean = false
 }
