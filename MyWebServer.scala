@@ -136,7 +136,7 @@ object MyWebServer {
 				case _: Throwable => return None
 			}
 		}
-		
+
 		None
 	}
 
@@ -170,7 +170,7 @@ object MyWebServer {
 	}
 
 	def respond(output: DataOutputStream, status: Int, mtime: Date, content_type: String, body: String) = {
-		val status_desc = if (status == 200) "OK" else if (status == 304) "Not Modified" else "" 
+		val status_desc = if (status == 200) "OK" else if (status == 304) "Not Modified" else ""
 		output.writeBytes(s"""HTTP/1.1 ${status} ${status_desc}
 Date: ${http_date.format(new Date)}
 Server: ${server_name}/${version} (GNU/Linux)
