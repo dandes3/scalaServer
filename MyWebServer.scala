@@ -71,7 +71,7 @@ object MyWebServer {
 		else if (!f.canRead)
 			403
 		else if (r.if_modified_since map { x => modifiedTime.compareTo(x) < 0} getOrElse(false))
-		    304
+		  304
 		else
 			200
 	}
@@ -144,7 +144,7 @@ object MyWebServer {
 	}
 
 	def okNotMod(output: DataOutputStream, path: Path, include_body: Boolean) = {
-		respond(output, 304, new Date(path.toFile.lastModified), Files.probeContentType(path), if (include_body) new String(Files.readAllBytes(path)) else "")
+		respond(output, 304, new Date(path.toFile.lastModified), Files.probeContentType(path), "")
 	}
 
 	def err(output: DataOutputStream, status: Int) = {
