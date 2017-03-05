@@ -70,7 +70,7 @@ object MyWebServer {
 			404
 		else if (!f.canRead)
 			403
-		else if (((modifiedTime.compareTo(r.if_modified_since) < 0))&&r.mod_bool)
+		else if (r.if_modified_since map { x => modifiedTime.compareTo(x) < 0} getOrElse(false))
 		    304
 		else
 			200
@@ -122,8 +122,7 @@ object MyWebServer {
 						key match {
 							case "Connection" => r.close_requested = (value == "close")
 							case "If-Modified-Since" => {
-								r.if_modified_since = http_date.parse(value, new ParsePosition(0))
-								r.mod_bool = true
+								r.if_modified_since = Some(http_date.parse(value, new ParsePosition(0)))
 							}
 							case _ => ;
 						}
@@ -186,8 +185,7 @@ ${body}
 class Request {
 	var verb: String = ""
 	var path: String = ""
-	var if_modified_since: Date = new Date
-	var mod_bool: Boolean = false
+	var if_modified_since: Option[Date] = None
 	var persistent: Boolean = true
 	var close_requested: Boolean = false
 }
