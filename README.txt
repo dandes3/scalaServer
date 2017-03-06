@@ -40,7 +40,7 @@ Usage--
        We have implemented very basic, minimal argument checking.
 
       When adding a date for any test, it should be in the form "EEE, dd MMM yyyy HH:mm:ss z"
-       i.e. "$ curl -I --header 'If-Modified-Since: Fri Mar 4 03:22:49 EDT 2017'
+       i.e. "$ curl -I --header 'If-Modified-Since: Fri, 4 Mar 2017 13:22:49 GMT'
        http://localhost:8817" 
        We convert, deliver, and refer to all times both externally and internally in GMT. 
 
