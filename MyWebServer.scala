@@ -41,7 +41,7 @@ object MyWebServer {
 			if (port < 0) throw new NumberFormatException
 			socket = new ServerSocket(port)
 			println(s"listening on port ${port}")
-			Iterator continually None foreach ( _ => got_connection(socket.accept) )
+			Iterator continually None foreach ( _ => got_connection(socket.accept) ) //debug
 		} catch {
 			case e: ArrayIndexOutOfBoundsException => println("Not enough arguments!")
 			case e: NumberFormatException => println(s"'${args(0)}' is not a port number!")
@@ -85,7 +85,7 @@ object MyWebServer {
 		else if (r.if_modified_since.map(x => !mtime.after(x)).getOrElse(false)) {
 			println(s"if_modified_since: ${http_date.format(r.if_modified_since.get)}")
 			println(s"mtime: ${http_date.format(mtime)}")
-		  304
+		    304
 		} else
 			200
 	}
@@ -196,6 +196,7 @@ Content-Length: ${body.length + 1}
 Content-Type: ${content_type}
 
 ${body}
+
 """)
 	}
 }

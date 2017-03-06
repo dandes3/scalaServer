@@ -25,8 +25,13 @@ Notes--
        packaged into a .jar file, along with all of Scala's dependencies. Since Scala is a
        JVM based language, the program is fully executable with the normal java run command.
        We have supplied both the pre-packaged MyWebServer.scala file (for code review
-       purposes) and the executable packaged MyWebServer jar (which is large due to
-       packaging).
+       purposes) and the executable packaged MyWebServer .jar (which is large due to the 
+       inclusion of all of the Scala language).
+
+      We want to again express our gratitude for allowing us to complete this assignment in 
+       an alternate JVM language, and by doing so, push the boundaries of our knowledge. 
+       While we understand any partial credit will be more difficult to assign due to the 
+       language differences, we are more than happy to answer any questions that may arise. 
 
 
 Usage--
@@ -34,7 +39,9 @@ Usage--
       The packaged jar is invoked with "$ java -jar MyWebServer.jar 8817 nameOfRootPath"
        We have implemented very basic, minimal argument checking.
 
-      When adding a date for any test, it should be in the form "EEE MMM d hh:mm:ss zzz yyyy"
-      i.e. "$ curl -I --header 'If-Modified-Since: Fri Mar 4 03:22:49 EDT 2017'
-      http://localhost:8817"
+      When adding a date for any test, it should be in the form "EEE, dd MMM yyyy HH:mm:ss z"
+       i.e. "$ curl -I --header 'If-Modified-Since: Fri Mar 4 03:22:49 EDT 2017'
+       http://localhost:8817" 
+       We convert, deliver, and refer to all times both externally and internally in GMT. 
+
 
