@@ -25,7 +25,7 @@ Notes--
        packaged into a .jar file, along with all of Scala's dependencies. Since Scala is a
        JVM based language, the program is fully executable with the normal java run command.
        We have supplied both the pre-packaged MyWebServer.scala file (for code review
-       purposes) and the executable packaged MyWebServer .jar (which is large due to the 
+       purposes) and the executable packaged MyWebServer.jar (which is large due to the 
        inclusion of all of the Scala language).
 
       We want to again express our gratitude for allowing us to complete this assignment in 
